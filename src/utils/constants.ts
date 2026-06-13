@@ -40,11 +40,10 @@ export const BOARD = {
   height: 650,
 } as const;
 
-const _b = BOARD;
-export const PEG_SPAN = (_b.pegCols - 1) * _b.pegSpacing;
-export const PEG_EXTENT = PEG_SPAN + _b.pegRadius * 2;
-export const PLAY_AREA_WIDTH = PEG_EXTENT + _b.pegWallGap * 2;
-export const BOARD_WIDTH = PLAY_AREA_WIDTH + _b.wallThickness * 2;
+export const PEG_SPAN = (BOARD.pegCols - 1) * BOARD.pegSpacing;
+const PEG_EXTENT = PEG_SPAN + BOARD.pegRadius * 2;
+export const PLAY_AREA_WIDTH = PEG_EXTENT + BOARD.pegWallGap * 2;
+export const BOARD_WIDTH = PLAY_AREA_WIDTH + BOARD.wallThickness * 2;
 
 export const TOTAL_PEGS = BOARD.pegRows % 2 === 0
   ? (BOARD.pegRows / 2) * (BOARD.pegCols + (BOARD.pegCols - 1))
@@ -205,7 +204,7 @@ export const BUMPER_FORCE = 0.08;
 // ── Shard config ──
 
 export const SHARDS = {
-  baseDropChance: 0.05,
+  baseDropChance: 0.01,
   enchantedDropChance: 0.15,
   prestigeDropBonus: 0.02,
 } as const;
@@ -280,21 +279,6 @@ export const RELICS: RelicConfig[] = [
   },
 ];
 
-// ── Auto-drop config ──
-
-export interface AutoDropPattern {
-  name: string;
-  shapes: string[];
-}
-
-export const AUTO_DROP_PATTERNS: AutoDropPattern[] = [
-  { name: "Triangle Spam", shapes: ["triangle", "triangle", "triangle", "triangle", "triangle"] },
-  { name: "Combo Build", shapes: ["triangle", "square", "circle", "diamond", "pentagon"] },
-  { name: "Value Rush", shapes: ["hexagon", "star", "hexagon", "star", "hexagon"] },
-  { name: "Balanced", shapes: ["triangle", "square", "circle", "square", "triangle"] },
-  { name: "Star Power", shapes: ["star", "star", "star", "star", "star"] },
-];
-
 // Upgrade configs
 export const UPGRADES: Record<string, { baseCost: number; costMultiplier: number; effect: number; maxLevel: number }> = {
   dropperSpeed: { baseCost: 50, costMultiplier: 1.8, effect: 100, maxLevel: 15 },
@@ -315,8 +299,8 @@ export const UPGRADES: Record<string, { baseCost: number; costMultiplier: number
   goldenHour: { baseCost: 2000, costMultiplier: 3.0, effect: 1, maxLevel: 5 },
   bumper: { baseCost: 1500, costMultiplier: 2.5, effect: 1, maxLevel: 5 },
   portal: { baseCost: 1800, costMultiplier: 2.8, effect: 1, maxLevel: 5 },
-  relicSlots: { baseCost: 10000, costMultiplier: 3.5, effect: 1, maxLevel: 2 },
-  shardChance: { baseCost: 2000, costMultiplier: 2.5, effect: 0.02, maxLevel: 10 },
+  relicSlots: { baseCost: 50000, costMultiplier: 4.5, effect: 1, maxLevel: 99 },
+  shardChance: { baseCost: 5000, costMultiplier: 3.0, effect: 0.01, maxLevel: 10 },
 };
 
 // Physics

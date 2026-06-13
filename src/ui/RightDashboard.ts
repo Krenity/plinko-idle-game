@@ -1,6 +1,6 @@
 import type { Game } from "../game/Game";
-import { PEG_EFFECTS, RELICS, SHAPE_UNLOCK_CHAIN } from "../utils/constants";
-import type { PegEffectConfig } from "../utils/constants";
+import { PEG_EFFECTS, RELICS, SHAPE_UNLOCK_CHAIN, SHARDS, UPGRADES } from "../utils/constants";
+import type { PegEffectConfig, RelicConfig } from "../utils/constants";
 import type { EffectState } from "../game/PegEffectManager";
 
 type Tab = "effects" | "upgrades" | "relics";
@@ -54,7 +54,6 @@ STYLE.textContent = `
 .effect-card[data-effect="portal"]       { --accent: #dd88ff; --accent-rgb: 221,136,255; }
 
 .effect-card {
-  background: #1a1a32;
   border: 1px solid #2a2a4a;
   border-left: 4px solid var(--accent);
   border-radius: 6px;
@@ -114,7 +113,7 @@ STYLE.textContent = `
 .effect-card.ready .progress-bar { width: 100% !important; }
 `;
 
-export class SidePanel {
+export class RightDashboard {
   private game: Game;
   private panel!: HTMLDivElement;
   private tab: Tab = "effects";
@@ -205,7 +204,7 @@ export class SidePanel {
     if (this.game.hasRelic("timeFreeze")) {
       const paused = this.game.effectManager.isPaused();
       const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 8px;background:#1a1a32;border:1px solid #3a3a5a;border-radius:4px;";
+      row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 8px;border:1px solid #3a3a5a;border-radius:4px;";
       const lbl = document.createElement("span");
       lbl.style.cssText = "flex:1;font-size:11px;color:#a0a0c0;";
       lbl.textContent = paused ? "Effects Paused" : "Effects Running";
@@ -226,7 +225,13 @@ export class SidePanel {
       container.appendChild(row);
     }
 
-    for (const cfg of PEG_EFFECTS) {
+    const sortedEffects = [...PEG_EFFECTS].sort((a, b) => {
+      const costA = UPGRADES[a.id]?.baseCost ?? 0;
+      const costB = UPGRADES[b.id]?.baseCost ?? 0;
+      return costA - costB;
+    });
+
+    for (const cfg of sortedEffects) {
       const state = this.game.effectManager.getState(cfg.id);
       if (!state) continue;
 
@@ -302,82 +307,122 @@ export class SidePanel {
   // ── Relics tab ──
 
   private renderRelics(container: HTMLDivElement): void {
-    const maxSlots = 2 + (this.game.upgradeSystem.upgrades.relicSlots || 0);
     const equipped = this.game.equippedRelics || [];
     const purchased = this.game.purchasedRelics || [];
+    const byCost = (a: typeof RELICS[0], b: typeof RELICS[0]) => a.cost - b.cost;
+    const unowned = RELICS.filter(r => !purchased.includes(r.id)).sort(byCost);
+    const owned = RELICS.filter(r => purchased.includes(r.id) && !equipped.includes(r.id)).sort(byCost);
+    const eqRelics = RELICS.filter(r => equipped.includes(r.id)).sort(byCost);
+
+    const maxSlots = 2 + (this.game.upgradeSystem.upgrades.relicSlots || 0);
+    const slotCap = Math.max(0, RELICS.length);
+    const slotsRemaining = maxSlots - equipped.length;
 
     // Slot indicator
     const slotInfo = document.createElement("div");
     slotInfo.style.cssText = "font-size:11px;color:#a0a0c0;margin-bottom:8px;text-align:center;";
-    slotInfo.textContent = `Equip Slots: ${equipped.length} / ${maxSlots}`;
+    slotInfo.textContent = `Equip Slots: ${equipped.length} / ${maxSlots} (max ${slotCap})`;
     container.appendChild(slotInfo);
 
-    for (const relic of RELICS) {
-      const isPurchased = purchased.includes(relic.id);
-      const isEquipped = equipped.includes(relic.id);
-      const canAfford = this.game.shardSystem.getShards() >= relic.cost;
-      const slotsFull = equipped.length >= maxSlots;
+    const section = (title: string) => {
+      const h = document.createElement("div");
+      h.style.cssText = "font-weight:bold;font-size:12px;margin:10px 0 6px;padding:4px 0;border-bottom:1px solid #2a2a4a;color:#a0a0c0;";
+      h.textContent = title;
+      container.appendChild(h);
+    };
 
-      const card = document.createElement("div");
-      card.style.cssText = `margin-bottom:8px;padding:8px;background:#1a1a32;border:1px solid ${isEquipped ? "#4a4a7a" : isPurchased ? "#2a4a2a" : "#2a2a4a"};border-left:3px solid ${isEquipped ? "#a855f7" : isPurchased ? "#10b981" : "#3a3a5a"};border-radius:4px;`;
-
-      const nameRow = document.createElement("div");
-      nameRow.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;";
-      const name = document.createElement("span");
-      name.style.cssText = "font-weight:bold;font-size:12px;color:#fff;";
-      name.textContent = relic.name;
-      nameRow.appendChild(name);
-
-      if (isEquipped) {
-        const badge = document.createElement("span");
-        badge.style.cssText = "font-size:9px;color:#a855f7;font-weight:bold;";
-        badge.textContent = "EQUIPPED";
-        nameRow.appendChild(badge);
-      } else if (isPurchased) {
-        const badge = document.createElement("span");
-        badge.style.cssText = "font-size:9px;color:#10b981;font-weight:bold;";
-        badge.textContent = "OWNED";
-        nameRow.appendChild(badge);
+    // ── Equipped ──
+    if (eqRelics.length > 0) {
+      section("Equipped");
+      for (const relic of eqRelics) {
+        this.renderRelicCard(container, relic, "equipped", maxSlots);
       }
-      card.appendChild(nameRow);
+    }
 
-      const desc = document.createElement("div");
-      desc.style.cssText = "font-size:10px;color:#8f8fad;margin-bottom:6px;";
-      desc.textContent = relic.desc;
-      card.appendChild(desc);
+    // ── Owned (not equipped) ──
+    if (owned.length > 0) {
+      section("Collection");
+      for (const relic of owned) {
+        this.renderRelicCard(container, relic, "owned", maxSlots);
+      }
+    }
 
-      const btn = document.createElement("button");
-      if (!isPurchased) {
-        btn.style.cssText = `width:100%;padding:6px;border:none;border-radius:3px;font-family:inherit;font-size:11px;font-weight:600;cursor:${canAfford ? "pointer" : "default"};background:${canAfford ? "#3a1a5a" : "#2a2a4a"};color:${canAfford ? "#fff" : "#666"};`;
-        btn.textContent = `Purchase (${this.formatNum(relic.cost)} \u25C6)`;
-        btn.disabled = !canAfford;
+    // ── Unowned ──
+    if (unowned.length > 0) {
+      section("For Sale");
+      for (const relic of unowned) {
+        this.renderRelicCard(container, relic, "unowned", maxSlots);
+      }
+    }
+  }
+
+  private renderRelicCard(container: HTMLDivElement, relic: RelicConfig, state: "equipped" | "owned" | "unowned", maxSlots: number): void {
+    const equipped = this.game.equippedRelics || [];
+    const purchased = this.game.purchasedRelics || [];
+    const isEquipped = equipped.includes(relic.id);
+    const isPurchased = purchased.includes(relic.id);
+    const canAfford = this.game.shardSystem.getShards() >= relic.cost;
+    const slotsFull = equipped.length >= maxSlots;
+
+    const card = document.createElement("div");
+    card.style.cssText = `margin-bottom:8px;padding:8px;border:1px solid ${isEquipped ? "#4a4a7a" : isPurchased ? "#2a4a2a" : "#2a2a4a"};border-left:3px solid ${isEquipped ? "#a855f7" : isPurchased ? "#10b981" : "#3a3a5a"};border-radius:4px;`;
+
+    const nameRow = document.createElement("div");
+    nameRow.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;";
+    const name = document.createElement("span");
+    name.style.cssText = "font-weight:bold;font-size:12px;color:#fff;";
+    name.textContent = relic.name;
+    nameRow.appendChild(name);
+
+    if (isEquipped) {
+      const badge = document.createElement("span");
+      badge.style.cssText = "font-size:9px;color:#a855f7;font-weight:bold;";
+      badge.textContent = "EQUIPPED";
+      nameRow.appendChild(badge);
+    } else if (isPurchased) {
+      const badge = document.createElement("span");
+      badge.style.cssText = "font-size:9px;color:#10b981;font-weight:bold;";
+      badge.textContent = "OWNED";
+      nameRow.appendChild(badge);
+    }
+    card.appendChild(nameRow);
+
+    const desc = document.createElement("div");
+    desc.style.cssText = "font-size:10px;color:#8f8fad;margin-bottom:6px;";
+    desc.textContent = relic.desc;
+    card.appendChild(desc);
+
+    const btn = document.createElement("button");
+    if (!isPurchased) {
+      btn.style.cssText = `width:100%;padding:6px;border:none;border-radius:3px;font-family:inherit;font-size:11px;font-weight:600;cursor:${canAfford ? "pointer" : "default"};background:${canAfford ? "#3a1a5a" : "#2a2a4a"};color:${canAfford ? "#fff" : "#666"};`;
+      btn.textContent = `Purchase (${this.formatNum(relic.cost)}\u25C6)`;
+      btn.disabled = !canAfford;
+      btn.addEventListener("click", () => {
+        if (this.game.shardSystem.spendShards(relic.cost)) {
+          this.game.purchasedRelics.push(relic.id);
+          this.render();
+        }
+      });
+    } else if (isEquipped) {
+      btn.style.cssText = "width:100%;padding:6px;border:none;border-radius:3px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;background:#3a1a3a;color:#a855f7;";
+      btn.textContent = "Unequip";
+      btn.addEventListener("click", () => {
+        this.game.equippedRelics = this.game.equippedRelics.filter((id: string) => id !== relic.id);
+        this.render();
+      });
+    } else {
+      btn.style.cssText = `width:100%;padding:6px;border:none;border-radius:3px;font-family:inherit;font-size:11px;font-weight:600;cursor:${slotsFull ? "default" : "pointer"};background:${slotsFull ? "#2a2a4a" : "#1a3a2a"};color:${slotsFull ? "#666" : "#fff"};`;
+      btn.textContent = slotsFull ? "Slots Full" : "Equip";
+      btn.disabled = slotsFull;
+      if (!slotsFull) {
         btn.addEventListener("click", () => {
-          if (this.game.shardSystem.spendShards(relic.cost)) {
-            this.game.purchasedRelics.push(relic.id);
-            this.render();
-          }
-        });
-      } else if (isEquipped) {
-        btn.style.cssText = "width:100%;padding:6px;border:none;border-radius:3px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;background:#3a1a3a;color:#a855f7;";
-        btn.textContent = "Unequip";
-        btn.addEventListener("click", () => {
-          this.game.equippedRelics = this.game.equippedRelics.filter((id: string) => id !== relic.id);
+          this.game.equippedRelics.push(relic.id);
           this.render();
         });
-      } else {
-        btn.style.cssText = `width:100%;padding:6px;border:none;border-radius:3px;font-family:inherit;font-size:11px;font-weight:600;cursor:${slotsFull ? "default" : "pointer"};background:${slotsFull ? "#2a2a4a" : "#1a3a2a"};color:${slotsFull ? "#666" : "#fff"};`;
-        btn.textContent = slotsFull ? "Slots Full" : "Equip";
-        btn.disabled = slotsFull;
-        if (!slotsFull) {
-          btn.addEventListener("click", () => {
-            this.game.equippedRelics.push(relic.id);
-            this.render();
-          });
-        }
       }
-      card.appendChild(btn);
-      container.appendChild(card);
     }
+    card.appendChild(btn);
+    container.appendChild(card);
   }
 
   private renderUpgrades(container: HTMLDivElement): void {
@@ -390,14 +435,20 @@ export class SidePanel {
 
     section("General");
     this.renderUpgradeCard(container, "dropperSpeed", "Dropper Speed", "Faster blob spawning");
-    this.renderUpgradeCard(container, "slotMultiplier", "Slot Multiplier", "Increase all slot values");
+    this.renderUpgradeCard(container, "slotMultiplier", "Upgrade Slots", "Increase all slot values");
     this.renderUpgradeCard(container, "shardChance", "Shard Chance", "Higher shard drop rate");
+    this.renderUpgradeCard(container, "relicSlots", "Relic Slots", "More relic equip slots");
 
     section("Shape Unlocks");
     this.renderShapeUnlockProgression(container);
 
     section("Effect Upgrades");
-    for (const meta of effectUpgradeMeta) {
+    const sortedEffectMeta = [...effectUpgradeMeta].sort((a, b) => {
+      const costA = UPGRADES[a.key]?.baseCost ?? 0;
+      const costB = UPGRADES[b.key]?.baseCost ?? 0;
+      return costA - costB;
+    });
+    for (const meta of sortedEffectMeta) {
       const cfg = PEG_EFFECTS.find((e) => e.id === meta.effectId);
       if (!cfg) continue;
       const level = this.game.effectManager.getLevel(meta.effectId);
@@ -427,15 +478,6 @@ export class SidePanel {
       allDone.textContent = "All shapes unlocked!";
       container.appendChild(allDone);
       return;
-    }
-
-    for (let i = 0; i < nextLocked; i++) {
-      const key = SHAPE_UNLOCK_CHAIN[i];
-      const name = SHAPE_NAMES[key] || key;
-      const row = document.createElement("div");
-      row.style.cssText = "padding:3px 0;font-size:11px;color:#10b981;";
-      row.textContent = name;
-      container.appendChild(row);
     }
 
     const nextKey = SHAPE_UNLOCK_CHAIN[nextLocked];
@@ -492,11 +534,11 @@ export class SidePanel {
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;";
 
     const dialog = document.createElement("div");
-    dialog.style.cssText = "background:#2a1a1a;border:2px solid #cc4444;border-radius:8px;padding:20px;max-width:320px;width:90%;font-family:'Segoe UI',sans-serif;color:#fff;";
+    dialog.style.cssText = "background:#2a1a1a;border:2px solid #ff4444;border-radius:8px;padding:20px;max-width:320px;width:90%;font-family:'Segoe UI',sans-serif;color:#fff;";
 
     const title = document.createElement("div");
-    title.style.cssText = "font-size:16px;font-weight:bold;color:#ff6666;margin-bottom:12px;";
-    title.textContent = "Master Reset — Step 1/2";
+    title.style.cssText = "font-size:16px;font-weight:bold;color:#ff4444;margin-bottom:12px;";
+    title.textContent = "Master Reset";
 
     const body = document.createElement("div");
     body.style.cssText = "font-size:12px;color:#ccc;margin-bottom:16px;line-height:1.5;";
@@ -505,47 +547,8 @@ export class SidePanel {
       • All upgrades &amp; prestige level<br>
       • All relics (equipped &amp; purchased)<br>
       • Auto-drop patterns<br><br>
-      <b style="color:#ff6666;">This cannot be undone.</b>`;
-
-    const btnRow = document.createElement("div");
-    btnRow.style.cssText = "display:flex;gap:8px;";
-
-    const nextBtn = document.createElement("button");
-    nextBtn.textContent = "I understand, continue";
-    nextBtn.style.cssText = "flex:1;padding:8px;background:#cc4444;color:#fff;border:none;cursor:pointer;font-weight:bold;border-radius:4px;";
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.style.cssText = "flex:1;padding:8px;background:#2a2a4a;color:#888;border:none;cursor:pointer;border-radius:4px;";
-
-    btnRow.appendChild(nextBtn);
-    btnRow.appendChild(cancelBtn);
-    dialog.appendChild(title);
-    dialog.appendChild(body);
-    dialog.appendChild(btnRow);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-
-    nextBtn.onclick = () => this.showMasterResetStep2(overlay);
-    cancelBtn.onclick = () => document.body.removeChild(overlay);
-  }
-
-  private showMasterResetStep2(previousOverlay: HTMLDivElement): void {
-    document.body.removeChild(previousOverlay);
-
-    const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;";
-
-    const dialog = document.createElement("div");
-    dialog.style.cssText = "background:#2a1a1a;border:2px solid #ff4444;border-radius:8px;padding:20px;max-width:320px;width:90%;font-family:'Segoe UI',sans-serif;color:#fff;";
-
-    const title = document.createElement("div");
-    title.style.cssText = "font-size:16px;font-weight:bold;color:#ff4444;margin-bottom:12px;";
-    title.textContent = "Master Reset — Step 2/2";
-
-    const body = document.createElement("div");
-    body.style.cssText = "font-size:12px;color:#ccc;margin-bottom:16px;line-height:1.5;";
-    body.innerHTML = `Type <b style="color:#ff6666;">RESET</b> below to confirm:`;
+      <b style="color:#ff6666;">This cannot be undone.</b><br><br>
+      Type <b style="color:#ff6666;">RESET</b> below to confirm:`;
 
     const input = document.createElement("input");
     input.type = "text";
@@ -599,7 +602,7 @@ export class SidePanel {
     const maxed = this.game.prestigeLevel >= 10;
 
     const card = document.createElement("div");
-    card.style.cssText = "padding:12px;background:#1a1a32;border:1px solid #3a2a5a;border-left:4px solid #a855f7;border-radius:6px;";
+    card.style.cssText = "padding:12px;border:1px solid #3a2a5a;border-left:4px solid #a855f7;border-radius:6px;";
 
     const levelRow = document.createElement("div");
     levelRow.style.cssText = "display:flex;justify-content:space-between;margin-bottom:4px;";
@@ -671,7 +674,7 @@ export class SidePanel {
 
   private renderUpgradeCard(container: HTMLDivElement, key: string, name: string, desc: string, isLocked?: boolean): void {
     const card = document.createElement("div");
-    card.style.cssText = `margin-bottom:8px;padding:8px;background:#1a1a32;border:1px solid ${isLocked ? "#4a2a2a" : "#2a2a4a"};border-left:3px solid ${isLocked ? "#ef4444" : "#4a4a7a"};border-radius:4px;`;
+    card.style.cssText = `margin-bottom:8px;padding:8px;border:1px solid ${isLocked ? "#4a2a2a" : "#2a2a4a"};border-left:3px solid ${isLocked ? "#ef4444" : "#4a4a7a"};border-radius:4px;`;
 
     const nameRow = document.createElement("div");
     nameRow.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;";
@@ -707,6 +710,7 @@ export class SidePanel {
     if (!isMaxed) {
       btn.addEventListener("click", () => {
         if (this.game.upgradeSystem.purchase(key)) {
+          this.game.soundManager.playUpgrade();
           this.applyUpgrade(key);
           this.render();
         }
@@ -748,16 +752,17 @@ export class SidePanel {
     const btn = document.createElement("div");
     btn.textContent = "?";
     btn.style.cssText = `
-      position: fixed; bottom: 44px; right: 256px;
-      width: 26px; height: 26px; border-radius: 50%;
+      position: fixed; top: 8px; right: 256px;
+      width: 28px; height: 28px; border-radius: 4px;
       background: #2a2a4a; color: #a0a0c0;
-      font-family: 'Segoe UI', sans-serif; font-size: 15px; font-weight: bold;
+      font-family: 'Segoe UI', sans-serif; font-size: 14px; font-weight: bold;
+      line-height: 1; padding: 0;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; z-index: 200; user-select: none;
-      border: 1px solid #3a3a5a; transition: background 0.15s;
+      border: 1px solid #3a3a5a; transition: background 0.15s, color 0.15s;
     `;
-    btn.addEventListener("mouseenter", () => { btn.style.background = "#3a3a5a"; this.showHelp(); });
-    btn.addEventListener("mouseleave", () => { btn.style.background = "#2a2a4a"; this.hideHelp(); });
+    btn.addEventListener("mouseenter", () => { btn.style.background = "#3a3a5a"; btn.style.color = "#fff"; this.showHelp(); });
+    btn.addEventListener("mouseleave", () => { btn.style.background = "#2a2a4a"; btn.style.color = "#a0a0c0"; this.hideHelp(); });
     document.body.appendChild(btn);
   }
 
@@ -765,22 +770,36 @@ export class SidePanel {
     if (this.helpTooltipRef) return;
     const tt = document.createElement("div");
     tt.style.cssText = `
-      position: fixed; bottom: 74px; right: 256px;
+      position: fixed; top: 40px; right: 256px;
       width: 220px; padding: 10px 12px;
       background: #1a1a32; border: 1px solid #2a2a4a; border-radius: 6px;
       font-family: 'Segoe UI', sans-serif; font-size: 11px; color: #c0c0d8;
       z-index: 200; line-height: 1.5;
     `;
+
+    const shardLevel = this.game.upgradeSystem.upgrades.shardChance ?? 0;
+    let shardPct = SHARDS.baseDropChance + shardLevel * 0.01;
+    if (this.game.hasRelic("shardMagnet")) shardPct *= 2;
+    const shardDisplay = (shardPct * 100).toFixed(1);
+
     tt.innerHTML = `
       <b style="color:#e0e0ff;">Combo</b><br>
-      Blobs falling in quick succession build a combo multiplier (center of board).
-      Each hit adds +1 to the combo counter. The counter fades after ~2s of no hits.
-      Combo caps at 5x (or 7.5x with <b>Combo Extender</b> relic).<br><br>
+      Each peg hit adds +0.1x to the combo multiplier (displayed above the board).
+      Combo resets when any blob lands in a slot.
+      Caps at 5x (or 7.5x with <b>Combo Extender</b> relic).<br><br>
+      <b style="color:#e0e0ff;">Shard Drops</b><br>
+      Peg hits have a ${shardDisplay}% chance to drop a shard (◆).
+      Enchanted pegs add an extra ${(SHARDS.enchantedDropChance * 100).toFixed(0)}% chance.
+      Shards are used to purchase relics.<br><br>
       <b style="color:#e0e0ff;">Peg Effects</b><br>
-      Upgrade effects in the sidebar. When ready, clicking a peg activates the effect
-      for a limited time. Effects earn value from blobs passing through their pegs.<br><br>
+      Effects auto-activate on cooldown cycles. Each enchants a random set of pegs.
+      Blobs passing through enchanted pegs trigger bonus earnings for that effect.<br><br>
       <b style="color:#e0e0ff;">Relics</b><br>
-      Purchased with shards (gold diamond icon). Equip relics to unlock passive bonuses.
+      Purchased with shards (◆). Equip relics to unlock passive bonuses.
+      Base 2 equip slots; upgrade <b>Relic Slots</b> to equip more.<br><br>
+      <b style="color:#e0e0ff;">Prestige</b><br>
+      Resets currency, upgrades, and effect levels for a permanent +0.5x multiplier.
+      Threshold: ${this.formatNum(this.game.getPrestigeThreshold())} earned.
     `;
     this.helpTooltipRef = tt;
     document.body.appendChild(tt);
@@ -797,7 +816,7 @@ export class SidePanel {
     const el = document.createElement("div");
     el.style.cssText = `
       position: fixed; bottom: 14px; right: 256px;
-      font-family: 'Courier New', monospace; font-size: 11px; color: #6d6d8d;
+      font-size: 11px; color: #6d6d8d;
       z-index: 200; user-select: none; text-align: right;
     `;
     el.textContent = "0:00:00";
@@ -820,11 +839,6 @@ export class SidePanel {
       this.playTimeEl.textContent = this.formatPlayTime(pt);
       this.lastPlayTime = pt;
     }
-  }
-
-  destroy(): void {
-    if (this.refreshInterval !== null) clearInterval(this.refreshInterval);
-    if (this.panel && this.panel.parentNode) this.panel.parentNode.removeChild(this.panel);
   }
 
   private statusText(state: EffectState): string {

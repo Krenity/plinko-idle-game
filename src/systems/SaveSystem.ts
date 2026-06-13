@@ -15,6 +15,7 @@ interface SaveData {
   effectStates?: Record<string, EffectSaveEntry>;
   equippedRelics?: string[];
   purchasedRelics?: string[];
+  playTime?: number;
   timestamp: number;
 }
 
@@ -29,6 +30,8 @@ export class SaveSystem {
   private setEquippedRelics: (v: string[]) => void = () => {};
   private getPurchasedRelics: () => string[] = () => [];
   private setPurchasedRelics: (v: string[]) => void = () => {};
+  private getPlayTime: () => number = () => 0;
+  private setPlayTime: (v: number) => void = () => {};
   constructor(scoreSystem: ScoreSystem, upgradeSystem: UpgradeSystem) {
     this.scoreSystem = scoreSystem;
     this.upgradeSystem = upgradeSystem;
@@ -54,6 +57,11 @@ export class SaveSystem {
     if (setPurchased) this.setPurchasedRelics = setPurchased;
   }
 
+  setPlayTimeCallbacks(get: () => number, set: (v: number) => void): void {
+    this.getPlayTime = get;
+    this.setPlayTime = set;
+  }
+
   save(): void {
     const data: SaveData = {
       currency: this.scoreSystem.getCurrency(),
@@ -65,6 +73,7 @@ export class SaveSystem {
       effectStates: this.effectManager?.getSaveData(),
       equippedRelics: this.getEquippedRelics(),
       purchasedRelics: this.getPurchasedRelics(),
+      playTime: this.getPlayTime(),
       timestamp: Date.now(),
     };
 
@@ -91,6 +100,7 @@ export class SaveSystem {
       this.setPrestigeLevel(data.prestigeLevel ?? 0);
       this.setEquippedRelics(data.equippedRelics ?? []);
       this.setPurchasedRelics(data.purchasedRelics ?? []);
+      this.setPlayTime(data.playTime ?? 0);
 
       if (data.effectStates && this.effectManager) {
         this.effectManager.loadSaveData(data.effectStates);

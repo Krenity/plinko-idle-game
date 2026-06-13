@@ -1,4 +1,4 @@
-import { UPGRADES } from "../utils/constants";
+import { RELICS, UPGRADES } from "../utils/constants";
 import type { ScoreSystem } from "./ScoreSystem";
 
 export class UpgradeSystem {
@@ -42,6 +42,10 @@ export class UpgradeSystem {
   }
 
   isMaxLevel(upgrade: string): boolean {
+    if (upgrade === "relicSlots") {
+      const max = Math.max(0, RELICS.length - 2);
+      return (this.upgrades.relicSlots || 0) >= max;
+    }
     const config = UPGRADES[upgrade as keyof typeof UPGRADES];
     if (!config) return true;
     return (this.upgrades[upgrade] || 0) >= config.maxLevel;

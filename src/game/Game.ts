@@ -3,10 +3,12 @@ import { SaveSystem } from "../systems/SaveSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
 import { ShardSystem } from "../systems/ShardSystem";
 import { UpgradeSystem } from "../systems/UpgradeSystem";
-import { HUD } from "../ui/HUD";
-import { SidePanel } from "../ui/SidePanel";
-import { BOARD, BOARD_WIDTH, COLORS, COMBO, DROPPER, PEG_EFFECTS, PLAY_AREA_WIDTH, PRESTIGE, SLOT_COLORS, BUMPER_FORCE, SHARDS, RELICS } from "../utils/constants";
+import { RightDashboard } from "../ui/RightDashboard";
+import { LeftDashboard } from "../ui/LeftDashboard";
+import { SoundManager } from "../audio/SoundManager";
+import { BOARD, BOARD_WIDTH, COLORS, COMBO, DROPPER, PEG_EFFECTS, PLAY_AREA_WIDTH, PRESTIGE, SLOT_COLORS, BUMPER_FORCE, SHARDS } from "../utils/constants";
 import { Board } from "./Board";
+import { BackgroundEffects } from "./BackgroundEffects";
 import { Dropper } from "./Dropper";
 import { FloatingTextManager } from "./FloatingText";
 import { MultiplierSlot } from "./MultiplierSlot";
@@ -24,12 +26,14 @@ export class Game {
   scoreSystem: ScoreSystem;
   upgradeSystem: UpgradeSystem;
   saveSystem: SaveSystem;
-  hud: HUD;
-  sidePanel!: SidePanel;
+  rightDashboard!: RightDashboard;
   particles!: ParticleSystem;
   floatingTexts!: FloatingTextManager;
+  bgEffects!: BackgroundEffects;
   effectManager!: PegEffectManager;
   shardSystem!: ShardSystem;
+  soundManager!: SoundManager;
+  leftDashboard!: LeftDashboard;
   private sensorToSlot: Map<Matter.Body, MultiplierSlot> = new Map();
 
   comboCount: number = 0;
@@ -58,14 +62,13 @@ export class Game {
     this.scoreSystem = new ScoreSystem();
     this.upgradeSystem = new UpgradeSystem(this.scoreSystem);
     this.saveSystem = new SaveSystem(this.scoreSystem, this.upgradeSystem);
-    this.hud = new HUD(this);
   }
 
   async init(): Promise<void> {
     this.app = new Application({
       resizeTo: window,
       backgroundColor: COLORS.background,
-      antialias: false,
+      antialias: true,
       resolution: 1,
     });
 
@@ -82,6 +85,10 @@ export class Game {
       () => this.prestigeLevel,
       (v: number) => { this.prestigeLevel = v; },
     );
+    this.saveSystem.setPlayTimeCallbacks(
+      () => this.playTime,
+      (v: number) => { this.playTime = v; },
+    );
     this.saveSystem.setShardSystem(this.shardSystem);
     this.saveSystem.setRelicCallbacks(
       () => this.equippedRelics,
@@ -90,6 +97,8 @@ export class Game {
       (v: string[]) => { this.purchasedRelics = v; },
     );
     this.physics.init();
+    this.bgEffects = new BackgroundEffects(this.app.stage);
+    this.bgEffects.init(this.app.renderer);
     this.board.init(this.app.stage, this);
     this.createBoardWalls();
     this.particles = new ParticleSystem(this.app.stage);
@@ -97,9 +106,14 @@ export class Game {
     this.createSlots();
     this.setupCollisionHandler();
     this.dropper.init();
-    this.hud.init(this.app.stage);
-    this.sidePanel = new SidePanel(this);
-    this.sidePanel.init();
+    this.rightDashboard = new RightDashboard(this);
+    this.rightDashboard.init();
+
+    this.leftDashboard = new LeftDashboard(this);
+    this.leftDashboard.init();
+
+    this.soundManager = new SoundManager();
+    this.soundManager.init();
 
     this.saveSystem.load();
     // Sync: any equipped relic must also be in purchased (fixes old saves)
@@ -117,14 +131,17 @@ export class Game {
     }
     this.prestigeMultiplier = 1 + this.prestigeLevel * PRESTIGE.multiplierPerLevel;
 
-    // Auto-drop pattern is restored via saveSystem callbacks
-
-    this.app.ticker.add(() => {
-      this.update(this.app.ticker.deltaMS);
-    });
-
     window.addEventListener("beforeunload", () => {
       this.saveSystem.save();
+    });
+    window.addEventListener("resize", () => {
+      this.bgEffects.handleResize();
+    });
+  }
+
+  start(): void {
+    this.app.ticker.add(() => {
+      this.update(this.app.ticker.deltaMS);
     });
   }
 
@@ -153,6 +170,7 @@ export class Game {
     this.physics.createBoardWalls(offsetX, topY, bottomY);
     this.physics.onBlobWallCollision((_blob, side) => {
       this.board.pulseWall(side);
+      this.soundManager.playWallHit();
     });
   }
 
@@ -226,6 +244,8 @@ export class Game {
 
       this.scoreSystem.addCurrency(earned);
       slot.flash();
+      this.soundManager.playCollect();
+      this.leftDashboard.addSlotEntry((blob as any).blobType || "blob", slotMult, slot.getSlotColor());
 
       this.floatingTexts.emit(slot.getCenterX(), slot.getCenterY(), earned, 0xffd93d);
 
@@ -252,6 +272,7 @@ export class Game {
 
       // ── Spring recoil ──
       this.board.onPegHit(pegIndex);
+      this.soundManager.playPegHit();
       // ── Combo counter ──
       this.board.updateCombo(this.comboMultiplier, true);
 
@@ -414,6 +435,8 @@ export class Game {
     this.scoreSystem.setTotalEarned(0);
     this.shardSystem.setShards(0);
     this.shardSystem.setTotalEarned(0);
+    this.scoreSystem.resetEarnings();
+    this.leftDashboard.resetStats();
 
     const freshUpgrades: Record<string, number> = {};
     for (const key of Object.keys(this.upgradeSystem.upgrades)) {
@@ -447,12 +470,15 @@ export class Game {
     this.scoreSystem.setTotalEarned(0);
     this.shardSystem.setShards(0);
     this.shardSystem.setTotalEarned(0);
+    this.scoreSystem.resetEarnings();
+    this.leftDashboard.resetStats();
 
     this.prestigeLevel = 0;
     this.prestigeMultiplier = 1;
 
     this.equippedRelics = [];
     this.purchasedRelics = [];
+    this.playTime = 0;
 
     const freshUpgrades: Record<string, number> = {};
     for (const key of Object.keys(this.upgradeSystem.upgrades)) {
@@ -478,20 +504,11 @@ export class Game {
     this.saveSystem.save();
   }
 
-  private accumulateEnchantedPegMap(): Map<number, number[]> {
-    const raw = this.effectManager.getAllEnchantedPegIndices();
-    const colorMap = new Map<number, number[]>();
-    for (const [pegIdx, effectIds] of raw) {
-      const colors = effectIds.map((id) => PEG_EFFECTS.find((e) => e.id === id)?.color ?? COLORS.pegHighlight);
-      colorMap.set(pegIdx, colors);
-    }
-    return colorMap;
-  }
-
   private accumulator: number = 0;
   private readonly FIXED_DELTA: number = 16.667;
 
   update(delta: number): void {
+    this.bgEffects.update(delta);
     this.accumulator += Math.min(delta, 50);
 
     while (this.accumulator >= this.FIXED_DELTA) {
@@ -500,6 +517,29 @@ export class Game {
     }
 
     this.effectManager.update(delta);
+
+    // ── Background color effect mapping ──
+    const bgGolden = this.effectManager.getState("goldenHour");
+    const bgJackpot = this.effectManager.getState("jackpot");
+    const bgMagnet = this.effectManager.getState("magnet");
+    const bgTreasure = this.effectManager.getState("treasure");
+    const bgPortal = this.effectManager.getState("portal");
+    const bgBumper = this.effectManager.getState("bumper");
+    if (bgGolden?.status === "active") {
+      this.bgEffects.setTargetColor(0x5a3a1a);
+    } else if (bgJackpot?.status === "active") {
+      this.bgEffects.setTargetColor(0x4a1a2a);
+    } else if (bgMagnet?.status === "active") {
+      this.bgEffects.setTargetColor(0x1a3a4a);
+    } else if (bgTreasure?.status === "active") {
+      this.bgEffects.setTargetColor(0x4a4a1a);
+    } else if (bgPortal?.status === "active") {
+      this.bgEffects.setTargetColor(0x2a1a4a);
+    } else if (bgBumper?.status === "active") {
+      this.bgEffects.setTargetColor(0x4a2a1a);
+    } else {
+      this.bgEffects.resetColor();
+    }
 
     // ── Sync bumper/portal pegs with Board ──
     const bumperState = this.effectManager.getState("bumper");
@@ -544,8 +584,6 @@ export class Game {
       this.applyMagnetForce();
     }
 
-    this.board.redrawPegs(this.accumulateEnchantedPegMap());
-
     this.dropper.update(delta);
     this.board.update(delta);
 
@@ -556,7 +594,6 @@ export class Game {
     this.particles.update(delta);
     this.floatingTexts.update(delta);
     this.playTime += delta;
-    this.hud.update();
   }
 
   private applyMagnetForce(): void {

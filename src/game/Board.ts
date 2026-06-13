@@ -100,6 +100,7 @@ export class Board {
   }
 
   private getWallTop(): number { return 0; }
+
   private getWallBottom(): number {
     return BOARD.pegStartY + (BOARD.pegRows - 1) * BOARD.pegSpacing + BOARD.pegRadius * 2 + 60;
   }

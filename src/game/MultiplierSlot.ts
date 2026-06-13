@@ -19,6 +19,7 @@ export class MultiplierSlot {
   private flashing: boolean = false;
   private flashOverlay: Graphics = new Graphics();
   private sensor: Matter.Body | null = null;
+  private slotColor: number;
 
   private dropOffset: number = 0;
   private dropTimer: number = 0;
@@ -32,6 +33,7 @@ export class MultiplierSlot {
     this.width = slotWidth;
     this.height = 40;
     this.multiplier = SLOT_MULTIPLIERS[index];
+    this.slotColor = SLOT_COLORS[index];
   }
 
   init(stage: Container): void {
@@ -135,6 +137,10 @@ export class MultiplierSlot {
     return this.multiplier + this.multiplierBonus;
   }
 
+  getSlotColor(): number {
+    return this.slotColor;
+  }
+
   addMultiplierBonus(bonus: number): void {
     this.multiplierBonus += bonus;
     this.updateLabel();
@@ -142,9 +148,5 @@ export class MultiplierSlot {
 
   setSensor(s: Matter.Body): void {
     this.sensor = s;
-  }
-
-  updateDisplay(): void {
-    this.updateLabel();
   }
 }

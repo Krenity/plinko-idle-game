@@ -56,18 +56,6 @@ export class PegEffectManager {
     return Array.from(this.effects.values());
   }
 
-  getActiveEffectIds(): string[] {
-    const active: string[] = [];
-    for (const [id, state] of this.effects) {
-      if (state.status === "active") active.push(id);
-    }
-    return active;
-  }
-
-  isAnyActive(): boolean {
-    return this.getActiveEffectIds().length > 0;
-  }
-
   addEarnings(effectId: string, amount: number): void {
     const ef = this.effects.get(effectId);
     if (ef) {
@@ -205,12 +193,6 @@ export class PegEffectManager {
       } else {
         ef.enchantedPegs.clear();
       }
-    }
-  }
-
-  clearPortalPairs(): void {
-    for (const [, ef] of this.effects) {
-      ef.portalPairs = [];
     }
   }
 

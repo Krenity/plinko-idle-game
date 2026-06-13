@@ -20,7 +20,6 @@ export class ScoreSystem {
       position: fixed;
       top: 10px;
       left: 10px;
-      font-family: 'Courier New', monospace;
       color: #ffffff;
       z-index: 100;
     `;
@@ -110,6 +109,11 @@ export class ScoreSystem {
 
   setTotalEarned(amount: number): void {
     this.totalEarned = amount;
+    this.updateDisplay();
+  }
+
+  resetEarnings(): void {
+    this.earnings = [];
     this.updateDisplay();
   }
 

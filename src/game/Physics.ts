@@ -136,11 +136,4 @@ export class Physics {
     Matter.Composite.add(this.world, slot);
     return slot;
   }
-
-  clear(): void {
-    for (const body of this.bodies) {
-      Matter.Composite.remove(this.world, body);
-    }
-    this.bodies = [];
-  }
 }
