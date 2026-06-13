@@ -1,5 +1,4 @@
-# Plinko Idle
-
+## Plinko Idle - [99.999% of this project was created by AI]
 An idle/incremental game built with PixiJS and Matter.js. A dropper spawns colored shapes that bounce through pegs into multiplier slots. Earn currency, buy upgrades, unlock effects, collect shards, and prestige for permanent multipliers.
 
 ## Quick Start
