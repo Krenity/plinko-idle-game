@@ -32,10 +32,10 @@ export class SoundManager {
   };
 
   private static readonly SOUNDS: Record<string, string> = {
-    peg: "/sounds/peg-hit.mp3",
-    collect: "/sounds/collect.mp3",
-    wall: "/sounds/wall-hit.mp3",
-    upgrade: "/sounds/upgrade.mp3",
+    peg: "sounds/peg-hit.mp3",
+    collect: "sounds/collect.mp3",
+    wall: "sounds/wall-hit.mp3",
+    upgrade: "sounds/upgrade.mp3",
   };
 
   init(): void {
